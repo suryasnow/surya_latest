@@ -1,0 +1,69 @@
+def semanticVersion = "${env.BUILD_NUMBER}.0.0"
+def version = "${env.BUILD_NUMBER}.0"
+
+def artifactname = "artifact_name_one.jar"
+def packageName = "pkg_one_${env.BUILD_NUMBER}"
+def repoName = "repo_one"
+
+def artifactname2 = "artifact_name_two.jar"
+def packageName2 = "package_two_${env.BUILD_NUMBER}"
+def repoName2 = "repo_two"
+
+def artifactname3 = "artifact_name_three.jar"
+def packageName3 = "package_three_${env.BUILD_NUMBER}"
+def repoName3 = "repo_three"
+
+pipeline {
+    agent any
+
+    tools{
+        maven "Maven"
+    }
+    environment{
+        SCANNER_HOME=tool "sonarScanner"
+    }
+    stages {
+
+        stage('STAGE1_PARENT') {
+            parallel {
+                      stage('STAGE1_PARALLEL_CHILD1') {
+                      steps {
+                        echo "IN STAGE1 PARALLEL CHILD1"
+                        sh 'mvn test'
+                        snDevOpsArtifact(artifactsPayload: """{"artifacts": [{"name": "${artifactname}", "version": "1.${env.BUILD_NUMBER}","semanticVersion": "1.${env.BUILD_NUMBER}.0","repositoryName": "${repoName}"}],"stageName": "STAGE1_PARENT/STAGE1_PARALLEL_CHILD1","branchName":"main"}""")
+                        //snDevOpsChange()
+                    }
+                    post{
+                        success{
+                            echo "TEST SUCCESS"
+                            junit "**/target/surefire-reports/*.xml"
+                        }
+                    }
+                }
+                      stage('STAGE1_PARALLEL_CHILD2') {
+                      steps {
+                        echo "IN STAGE1 PARALLEL CHILD2"
+                        sh 'mvn test'
+                        snDevOpsArtifact(artifactsPayload: """{"artifacts": [{"name": "${artifactname2}", "version": "1.${env.BUILD_NUMBER}","semanticVersion": "1.${env.BUILD_NUMBER}.0","repositoryName": "${repoName2}"}],"stageName": "STAGE1_PARENT/STAGE1_PARALLEL_CHILD2","branchName":"main"}""")
+                        snDevOpsPackage(name: "${packageName}", artifactsPayload: """{"artifacts":[{"name": "${artifactname2}", "version": "1.${env.BUILD_NUMBER}", "repositoryName": "${repoName2}"}],"stageName": "STAGE1_PARENT/STAGE1_PARALLEL_CHILD2", "branchName":"main"}""")
+                        // add wait time in case package is not built
+                        
+                    }
+                    post{
+                        success{
+                            echo "TEST SUCCESS"
+                            junit "**/target/surefire-reports/*.xml"
+                        }
+                    }
+                }
+            }
+        }
+            stage('STAGE2') {
+                  steps{
+                    echo "IN STAGE2"
+                    snDevOpsChange()
+            }
+
+        }
+    }
+}

@@ -1,0 +1,28 @@
+pipeline {
+	agent any
+
+	tools {
+		maven 'Maven'
+	}
+	
+	environment {
+		SCANNER_HOME = tool 'sonarScanner'
+	}
+
+	stages {
+		stage('Build') {
+			stages {
+				stage("Build.1") {
+					stages{
+						stage('Build.2'){
+							steps {
+								echo"build 1.1.1 executed"
+								snDevOpsChange()
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

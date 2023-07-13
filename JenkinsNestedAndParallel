@@ -1,0 +1,128 @@
+def semanticVersion = "${env.BUILD_NUMBER}.0.0"
+def packageName = "devops_package_${env.BUILD_NUMBER}"
+def version = "${env.BUILD_NUMBER}.0"
+def artifactname = "devops_artifact_${env.BUILD_NUMBER}.jar"
+def repoName = "First_repo"
+
+pipeline {
+	agent any
+	tools {
+		maven 'Maven'
+	}
+	environment {
+		SCANNER_HOME = tool 'sonarScanner'
+	}
+
+	stages {
+		stage('Build') {
+			stages {
+				stage("Build_Nested") {
+					steps {
+						echo "build 1.1 executed"
+						sh 'mvn clean'
+						sleep 10
+						snDevOpsArtifact(artifactsPayload: """{"artifacts": [{"name": "${artifactname}", "version": "1.${env.BUILD_NUMBER}","semanticVersion": "1.${env.BUILD_NUMBER}.0","repositoryName": "${repoName}"}],"branchName":"main"}""")
+				          sleep 5
+					  	snDevOpsPackage(name: "${packageName}-${env.BUILD_NUMBER}", artifactsPayload: """{"artifacts":[{"name": "${artifactname}", "version": "1.${env.BUILD_NUMBER}", "repositoryName": "${repoName}"}], "branchName":"main"}""")
+						sleep 20
+						snDevOpsChange(changeRequestDetails: """{
+						    "setCloseCode": false,
+						         "attributes": {
+						            "requested_by": {
+						                "name": "DevOps System"
+						             },
+						            "category": "DevOps",
+						            "priority": "2",
+						            "comments": "This is a sample pipeline script to be added in your change step",
+						            "work_notes": "Update this to work_notes",
+						            "start_date": "2022-01-05 11:59:59",
+						            "end_date": "2022-01-08 11:59:59"
+						      }
+						}""")
+						//sonarSummaries()
+					}
+				} // end of build 1.1
+			} // end of stages
+		} // end of build1
+
+		stage('Test') {
+			parallel {
+				stage('parallelTest1') {
+					// Nested stage inside parallel
+					stages {
+						stage("nested_inside_parallel") {
+							steps {
+								echo 'nested_inside_parallel'
+								// sh 'mvn test -Dpublish'
+								sh 'mvn test -Dpublish'
+								sleep 5
+								junit "**/target/surefire-reports/*.xml"
+								sleep 15
+							}
+							post {
+								success {
+									echo 'Test1-success'
+									junit "**/target/surefire-reports/*.xml"
+								}
+							}
+						}
+						stage("Deploy1") {
+							steps {
+								echo 'CR1'
+								sleep 10
+								
+								snDevOpsChange(changeRequestDetails: """
+								  {
+								    "setCloseCode": false,
+								         "attributes": {
+								            "requested_by": {
+								                "name": "DevOps System"
+								             },
+								            "category": "DevOps",
+								            "priority": "2",
+								            "comments": "This is a sample pipeline script to be added in your change step",
+								            "work_notes": "Update this to work_notes",
+								            "start_date": "2022-01-05 11:59:59",
+								            "end_date": "2022-01-08 11:59:59"
+								      }
+								}""")
+							}
+						}
+
+					} // end of stages
+				} // end of parallelTest1
+				stage('parallelTest2') {
+					stages {
+						stage("nested_inside_parallel2") {
+							steps {
+								sleep 20
+								sh 'mvn test -Dpublish'
+								echo 'Test2 in progress'
+								sleep 5
+								junit "**/target/surefire-reports/*.xml"
+								sleep 15
+								snDevOpsChange()
+								//sonarSummaries()
+							}
+							post {
+								success {
+									echo 'Test2-success'
+									junit "**/target/surefire-reports/*.xml"
+								}
+							}
+						}
+						stage("Deploy2") {
+							steps {
+								echo 'CR2'
+								sleep 10
+								snDevOpsChange()
+							}
+						}
+					} //end of stages			 
+				} // end of parallelTest2
+
+			} // end of parallel
+		} // end of Test
+
+	} // end of stages
+} // end of pipeline

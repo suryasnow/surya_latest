@@ -1,0 +1,61 @@
+
+pipeline {
+   agent any
+   tools {
+      maven 'Maven'
+   }
+   stages {
+       stage("Build") {
+                steps {
+                    echo "Building" 
+                    sh 'mvn -X clean install -DskipTests'
+                    sleep 5
+                }
+       }
+        stage("Test") {
+           steps {
+               echo "Testing"
+               sh 'mvn test'
+               sleep 15
+           }
+          post {
+                always {
+                    junit '**/target/surefire-reports/*.xml' 
+                }
+          }
+        }
+      
+      stage("Create Artifact for prod") {
+           steps {
+              echo "Creating package"
+              sh 'mvn package'
+              sleep 3
+             
+              snDevOpsPackage(name: "avgbrewingapp", artifactsPayload: """
+              {"artifacts": 
+               [
+                  {
+                     "name": "avgbrewingapp-mvp.zip",
+                     "repositoryName": "bm-artifacts-repo",
+                     "pipelineName": "Average App Pipeline",
+                     "taskExecutionNumber":"${env.BUILD_NUMBER}",
+                     "stageName":"Create Artifact for prod",
+                     "branchName": "master"
+                   }
+                 ]
+                }""")
+                
+                sleep 3
+                
+                snDevOpsChange()
+           }
+        }
+  
+      stage("Deploy") {
+             steps{
+                  echo ">> Deploy in prod"
+              }
+      }      
+      
+  }
+}

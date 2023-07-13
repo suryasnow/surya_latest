@@ -1,0 +1,68 @@
+def artifactname = "artifact_devops_${env.BUILD_NUMBER}.jar"
+def repoName = "repository_devops"
+def pipelineName = "pipeline_devops"
+def semanticVersion = "${env.BUILD_NUMBER}.0.0"
+def packageName = "package_devops_${env.BUILD_NUMBER}"
+def version = "${env.BUILD_NUMBER}.0"
+
+pipeline {
+  agent any
+  tools {
+       maven 'Maven'
+   }
+   environment {
+	 SCANNER_HOME = tool 'sonarScanner'
+	}  
+  stages {
+       stage('Build') {
+           steps {
+              sh 'mvn -B -DskipTests clean compile'
+           }
+       }
+       stage('Test') {
+           steps {
+              sh 'mvn test'
+           }
+           post {
+             always {
+                junit "**/target/surefire-reports/*.xml"
+             }
+           }
+       }
+       
+       stage('Pre-Prod') {
+		steps {
+                    sonarSummaries()
+                    snDevOpsArtifact(artifactsPayload: """{"artifacts": [{"name": "${artifactname}", "version": "1.${env.BUILD_NUMBER}","semanticVersion": "1.${env.BUILD_NUMBER}.0","repositoryName": "${repoName}"}],"branchName":"main"}""")
+                    snDevOpsPackage(name: "${packageName}", artifactsPayload: """{"artifacts":[{"name": "${artifactname}", "version": "1.${env.BUILD_NUMBER}","semanticVersion": "1.${env.BUILD_NUMBER}.0","repositoryName": "${repoName}"}], "branchName":"main"}""")
+            }       
+       }
+      stage('Deploy') {
+                 steps {
+                    echo 'Deploying the change....'
+                    snDevOpsChange(ignoreErrors:false)
+                 }
+      }
+
+ }
+ 
+}
+
+def sonarSummaries() {
+
+   //withSonarQubeEnv('Sonar_Cloud') {
+       //sh '${SCANNER_HOME}/bin/sonar-scanner -Dproject.settings=${SCANNER_HOME}/conf/qa-sonar-scanner-cloud.properties'
+	 //}
+
+    withSonarQubeEnv('sonarQube_local'){
+      if(fileExists("sonar-project.properties")) {
+      	sh '${SCANNER_HOME}/bin/sonar-scanner'
+        } else {
+            sh '${SCANNER_HOME}/bin/sonar-scanner -Dproject.settings=${SCANNER_HOME}/conf/qa-sonar-scanner.properties'
+   		  //sh '${SCANNER_HOME}/bin/sonar-scanner -Dproject.settings=${SCANNER_HOME}/conf/sonar-scanner.properties'
+        }
+	  }
+   // timeout(time: 1, unit: 'MINUTES') {
+   //     waitForQualityGate abortPipeline: false
+   // }
+} // end of def sonarsummaries

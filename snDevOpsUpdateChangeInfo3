@@ -1,0 +1,82 @@
+def changeRequestId = "test"
+pipeline {
+    agent any
+
+    stages {
+        stage('Hello') {
+            steps {
+                echo 'Hello World'
+            }
+        }
+        stage('Nested_Change'){
+            stages {
+                stage('Nested_Change_L1-1'){
+                    stages{
+                        stage('Nestage_Change_L12-1'){
+                            steps{
+                                snDevOpsChange()
+                                script{
+                                    changeRequestId = snDevOpsGetChangeNumber()
+                                }
+                                echo "Nestage_Change_L12-1, changeRequestId => ${changeRequestId}, in the current Stage"
+                            }
+                        }
+                    }
+                    
+                }
+                stage('Nested_Change_L1-2'){
+                    steps{
+                        echo "Nested_Change_L1-2, get Change Details from => Test Log"
+                    }
+                }
+            }
+        }
+        stage('Update_Change') {
+            steps {
+                echo 'Change Step'
+                snDevOpsStep()
+                //snDevOpsChange()
+                //snDevOpsChange changeRequestDetails: '{ "attributes": { "short_description": "Test description", "priority": "1", "start_date": "2021-02-05 08:00:00", "end_date": "2022-04-05 08:00:00", "justification": "test justification", "description": "test description", "cab_required": true, "comments": "This update for work notes is from jenkins file", "work_notes": "test work notes", "assignment_group": "a715cd759f2002002920bde8132e7018" }, "setCloseCode": false }'
+                 script{
+                //     //changeRequestId = snDevOpsGetChangeNumber()
+                snDevOpsUpdateChangeInfo(changeRequestDetails: """{ "description": "Test description in Update_Change Step by ${env.BUILD_NUMBER}", "comments": "This update for work notes is from jenkins file from Second_Update_Change", "work_notes": "test Update from Update_Change"}""", changeRequestNumber: """${changeRequestId}""")
+                //changeRequestId = snDevOpsGetChangeNumber()
+                //     changeRequestId = snDevOpsUpdateChangeInfo()
+                //     echo "Change Step, changeId - ${changeRequestId}"
+                }
+                
+                echo "Change Step, changeId - ${changeRequestId}"
+                echo 'Change Done'
+            }
+        }
+        stage('Change_Info') {
+            steps {
+                script{
+                    echo "snDevOpsGetChangeNumber Step, changeId - ${changeRequestId}"
+                    //changeRequestId = snDevOpsUpdateChangeInfo()
+                    //changeRequestId = snDevOpsGetChangeNumber pipelineDetails: '{"attributes":{"pipeline_name":"Surya_AdvCR","build_number":"35","step_name":"Change"}}'
+                    changeRequestId = snDevOpsGetChangeNumber changeDetails: '{"pipeline_name":"Surya-AdvCR","build_number":"7","stage_name":"Change"}'
+                    echo "snDevOpsGetChangeNumber Done, changeId - ${changeRequestId}"
+                    changeRequestId = snDevOpsUpdateChangeInfo()
+                    echo "snDevOpsGetChangeNumber Done, changeId - ${changeRequestId}"
+                    
+                }
+            }
+        }
+        // stage('Second_Change') {
+        //     steps {
+        //         echo 'Change Step'
+        //         snDevOpsStep()
+        //         snDevOpsChange()
+        //         script{
+        //             //changeRequestId = snDevOpsGetChangeNumber()
+        //             changeRequestId = snDevOpsUpdateChangeInfo()
+        //             echo "Change Step, changeId - ${changeRequestId}"
+        //         }
+        //         echo "Change Step, changeId - ${changeRequestId}"
+        //         echo 'Change Done'
+        //     }
+        // }
+        
+    }
+}

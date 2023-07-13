@@ -1,0 +1,149 @@
+def packageName = "package_app-devops.war"
+
+def artifactname = "artifact_app_devops.jar"
+def version = "1.${BUILD_NUMBER}"
+def semanticVersion = "1.${BUILD_NUMBER}.0"
+
+def repoName = "pramaraju96/DevOps-Test"
+def pipelineName = "${JOB_NAME}"
+
+def changeRequestId = "defaultChangeRequestId"
+def stageName = "Deploy"
+
+pipeline {
+	agent any
+	
+	tools {
+		maven 'Maven'
+	}
+
+	environment {
+		SCANNER_HOME = tool 'sonarScanner'
+	} 
+
+	stages {
+		stage('Build') {
+			steps {
+			echo "JOB_NAME...${JOB_NAME}"
+			  sh 'mvn -B -DskipTests clean compile'
+			}
+		}
+
+		stage('Test') {
+			steps {
+			  	sh 'mvn test'
+					sleep(5);
+			}
+			post {
+			 always {
+			    junit "**/target/surefire-reports/*.xml"
+			 }
+			}
+		}
+		   
+		stage('Pre-Prod') {
+			steps {
+				sonarSummaries()
+
+				snDevOpsArtifact(artifactsPayload: """
+				{
+				"artifacts":
+				[
+				    {
+				        "name": "${artifactname}",
+				        "version": "${version}",
+				        "semanticVersion": "${semanticVersion}",
+				        "repositoryName": "${repoName}"
+				    }
+				],
+				"branchName": "main"
+				}""")
+
+				snDevOpsPackage(
+				name: "${packageName}",
+				artifactsPayload: """
+				{
+				    "artifacts":
+				    [
+				        {
+				            "name": "${artifactname}",
+				            "version": "${version}",
+				            "semanticVersion": "${semanticVersion}",
+				            "repositoryName": "${repoName}"
+				        }
+				    ],
+				    "branchName": "main"
+				}""")
+			}     
+		}
+		  
+		stage('Deploy') {
+			 steps {
+			    echo 'Deploying the change....'
+			    
+			    snDevOpsChange(changeRequestDetails:"""
+			    {
+				    "attributes":
+				    {
+				        "short_description": "Test description",
+				        "priority": "1",
+				        "start_date": "2021-02-05 08:00:00",
+				        "end_date": "2022-04-05 08:00:00",
+				        "justification": "test justification",
+				        "description": "test description",
+				        "cab_required": true,
+				        "comments": "This update for work notes is from jenkins file",
+				        "work_notes": "test work notes"
+				    },
+				    "setCloseCode": true
+				}""")
+			    
+			    //snDevOpsChange(ignoreErrors:false)
+			    
+			    script {
+			    	echo 'Inside script step...'
+			    	
+			    	changeRequestId = snDevOpsGetChangeNumber()
+			    	echo "Change Request Id without any attributes... ${changeRequestId}"
+
+					changeRequestId = snDevOpsGetChangeNumber(
+						changeDetails: """
+						{
+							"build_number":"${BUILD_NUMBER}",
+							"pipeline_name":"${pipelineName}",
+							"stage_name":"${stageName}"
+						}""")
+					echo "Change Request Id with attributes... ${changeRequestId}"
+
+					echo "Updating the change details ..."
+					snDevOpsUpdateChangeInfo(
+					    changeRequestDetails: """
+					    {
+					        "state":"3",
+					        "comments": "Change request comments UPDATED!!!",
+					        "work_notes": "Change request work_notes UPDATED!!!"
+					    }""",
+					    changeRequestNumber: """${changeRequestId}""")
+					echo "Verify the state, comments and work_notes are updated"
+			    }
+			 }
+		}
+	}
+}
+
+def sonarSummaries() {
+	withSonarQubeEnv('sonarcloud.io'){
+		if(fileExists("sonar-project.properties")) {
+			sh '${SCANNER_HOME}/bin/sonar-scanner'
+		} else {
+			sh 'mvn clean verify sonar:sonar \
+			    -Dsonar.login=1926d793f92181dd0ac406335d4d4bea392a3023 \
+			    -Dsonar.host.url=https://sonarcloud.io \
+			    -Dsonar.organization=pramaraju96 \
+			    -Dsonar.projectKey=pramaraju96_DevOps-Test'
+		}
+	}
+	timeout(time: 1, unit: 'MINUTES') {
+		waitForQualityGate abortPipeline: false
+	}
+}

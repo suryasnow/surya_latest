@@ -1,0 +1,76 @@
+def artifactname = "artifact_devops_${env.BUILD_NUMBER}.jar"
+def repoName = "repository_devops"
+def pipelineName = "pipeline_devops"
+def semanticVersion = "${env.BUILD_NUMBER}.0.0"
+def packageName = "package_devops_${env.BUILD_NUMBER}"
+def version = "${env.BUILD_NUMBER}.0"
+def changeRequestId = "defaultChangeRequestId"
+
+pipeline {
+  agent any
+  tools {
+       maven 'Maven'
+   }
+   environment {
+	 SCANNER_HOME = tool 'sonarScanner'
+	}  
+  stages {
+       stage('Build') {
+           steps {
+              sh 'mvn -B -DskipTests clean compile'
+           }
+       }
+       stage('Test') {
+           steps {
+              sh 'mvn test'
+	      sleep(3);
+           }
+          post {
+             always {
+                junit "**/target/surefire-reports/*.xml"
+             }
+           }
+	  
+       }
+       
+       stage('Pre-Prod') {
+		steps {
+            sleep(3);
+            snDevOpsArtifact(artifactsPayload: """{"artifacts": [{"name": "${artifactname}", "version": "1.${env.BUILD_NUMBER}","semanticVersion": "1.${env.BUILD_NUMBER}.0","repositoryName": "${repoName}"}],"branchName":"main"}""")
+            snDevOpsPackage(name: "${packageName}", artifactsPayload: """{"artifacts":[{"name": "${artifactname}", "version": "1.${env.BUILD_NUMBER}","semanticVersion": "1.${env.BUILD_NUMBER}.0","repositoryName": "${repoName}"}], "branchName":"main"}""")
+            }       
+       }
+      stage('Deploy') {
+                 steps {
+                    echo 'Deploying the change....'
+                    snDevOpsChange(ignoreErrors:false)
+                    script {
+                    	echo 'Inside script step...'
+                    	//changeRequestId = snDevOpsGetChangeNumber() //UNCOMMENT WITH 1.36 CODE AND ABOVE
+                    //changeRequestId = snDevOpsGetChangeNumber(changeDetails: """{"build_number":"${env.BUILD_NUMBER}","pipeline_name":pipelineName,"stage_name":"${stageName}"}""")
+                    //echo "Change Request Id without any attributes... ${changeRequestId}"
+                    }
+                    sonarSummaries()
+                 }
+      }
+ }
+}
+
+def sonarSummaries() {
+
+   //withSonarQubeEnv('Sonar_Cloud') {
+       //sh '${SCANNER_HOME}/bin/sonar-scanner -Dproject.settings=${SCANNER_HOME}/conf/qa-sonar-scanner-cloud.properties'
+	 //}
+
+    withSonarQubeEnv('sonarQube_local'){
+      if(fileExists("sonar-project.properties")) {
+      	sh '${SCANNER_HOME}/bin/sonar-scanner'
+        } else {
+            sh '${SCANNER_HOME}/bin/sonar-scanner -Dproject.settings=${SCANNER_HOME}/conf/qa-sonar-scanner.properties'
+   		  //sh '${SCANNER_HOME}/bin/sonar-scanner -Dproject.settings=${SCANNER_HOME}/conf/sonar-scanner.properties'
+        }
+	  }
+   // timeout(time: 1, unit: 'MINUTES') {
+   //     waitForQualityGate abortPipeline: false
+   // }
+} // end of def sonarsummaries
